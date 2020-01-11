@@ -74,6 +74,9 @@ class YoutubeNotifier(commands.Cog):
                 await asyncio.sleep(300)
             else:
                 r = await self._check()
+                if r is None:
+                    logger.error("The responce object is null, check your API quota limits")
+                    return
                 if r["id"]["videoId"] == self.last_video:
                     await asyncio.sleep(300)
                     continue
@@ -120,7 +123,7 @@ class YoutubeNotifier(commands.Cog):
             )
             if resp.status == 403:
                 if len(self.api_keys) <= 1:
-                    log.error("API Ratelimit reached and only one API key provided")
+                    logger.error("API Ratelimit reached and only one API key provided")
                     return
                 return await self._check()
             json = await resp.json()
@@ -265,6 +268,9 @@ class YoutubeNotifier(commands.Cog):
         Test the embed.
         """
         r = await self._check()
+        if r is None:
+            logger.error("The responce object is null, check your API quota limits")
+            return
         url = f"https://www.youtube.com/watch?v={r['id']['videoId']}"
         embed = discord.Embed(color=0xC4302B)
         embed.description = r["snippet"]["description"]
