@@ -71,19 +71,19 @@ class YoutubeNotifier(commands.Cog):
                 or self.discord_channel == ""
                 or self.yt_playlist == ""
             ):
-                await asyncio.sleep(10)
+                await asyncio.sleep(300)
             else:
                 r = await self._check()
-                if r["contentDetails"]["videoId"] == self.last_video:
-                    await asyncio.sleep(10)
+                if r["id"]["videoId"] == self.last_video:
+                    await asyncio.sleep(300)
                     continue
                 else:
                     channel = self.bot.get_channel(int(self.discord_channel)
                     )
                     if channel is None:
-                        await asyncio.sleep(10)
+                        await asyncio.sleep(300)
                         continue
-                    url = f"https://ww.youtube.com/watch?v={r['contentDetails']['videoId']}"
+                    url = f"https://www.youtube.com/watch?v={r['id']['videoId']}"
                     embed = discord.Embed(color=0xC4302B)
                     embed.description = r["snippet"]["description"]
                     embed.set_author(
@@ -95,31 +95,34 @@ class YoutubeNotifier(commands.Cog):
                     embed.url = url
                     embed.description = r["snippet"]["description"].split("\n\n")[0]
                     try:
-                        embed.set_image(url=r["snippet"]["thumbnails"]["standard"]["url"])
-                    except KeyError:
+                        embed.set_image(url=f"https://i.ytimg.com/vi/{r['id']['videoId']}/sddefault.jpg")
+                    except:
                         pass
                     embed.set_footer(text="Uploaded ")
-                    embed.timestamp = dateutil.parser.parse(r["contentDetails"]["videoPublishedAt"])
+                    embed.timestamp = dateutil.parser.parse(r["snippet"]["publishedAt"])
                     await channel.send(
                         f"{self.msg.replace('{url}', url) if len(self.msg) > 0 else ' '}",
                         embed=embed,
                     )
-                    self.last_video = r["contentDetails"]["videoId"]
+                    self.last_video = r["id"]["videoId"]    
                     await self.db.find_one_and_update(
                         {"_id": "config"},
                         {"$set": {"lastvideo": self.last_video}},
                         upsert=True
                         )
-                    await asyncio.sleep(10)
+                    await asyncio.sleep(300)
 
     async def _check(self):
         try:
             resp = await self.bot.session.get(
-                f"https://www.googleapis.com/youtube/v3/playlistItems?part=snippet%2CcontentDetails&maxResults=50"
-                f"&playlistId={self.yt_playlist}&key={random.choice(self.api_keys)}",
+               f"https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=date&safeSearch=none&key={random.choice(self.api_keys)}&channelId={self.yt_channel}",
                 headers={"Accept": "application/json"},
             )
-
+            if resp.status == 403:
+                if len(self.api_keys) <= 1:
+                    log.error("API Ratelimit reached and only one API key provided")
+                    return
+                return await self._check()
             json = await resp.json()
             return json["items"][0]
         except Exception as e:
@@ -170,7 +173,7 @@ class YoutubeNotifier(commands.Cog):
             return
 
         resp = await self.bot.session.get(
-            f"https://www.googleapis.com/youtube/v3/playlistItems?part=snippet%2CcontentDetails&maxResults=50&playlistId={self.yt_playlist}&key={random.choice(self.api_keys)}",
+            f"https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&order=date&safeSearch=none&key={random.choice(self.api_keys)}&channelId={self.yt_channel}",
             headers={"Accept": "application/json"},
         )
         if resp.status != 200:
@@ -178,11 +181,8 @@ class YoutubeNotifier(commands.Cog):
             return
         json1 = await resp.json()
         try:
-            last = json1["items"][0]["contentDetails"]["videoId"]
+            last = json1["items"][0]['id']['videoId']
             self.last_video = last
-        # except KeyError:
-        #     await ctx.send("Failed1. Check the ID Once")
-        #     return
         except Exception as e:
             await ctx.send("Failed. Check Logs for more details")
             logger.error(e)
@@ -228,6 +228,9 @@ class YoutubeNotifier(commands.Cog):
     @commands.guild_only()
     @checks.has_permissions(PermissionLevel.ADMIN)
     async def message(self, ctx: commands.Context, *, msg: str):
+        """
+        Set a message to be sent with the embed
+        """
         await self.db.find_one_and_update(
             {"_id": "config"},
             {"$set": {"message": msg, "updatedAt": datetime.utcnow()}},
@@ -258,8 +261,11 @@ class YoutubeNotifier(commands.Cog):
     @commands.guild_only()
     @checks.has_permissions(PermissionLevel.ADMIN)
     async def test(self, ctx: commands.Context):
+        """
+        Test the embed.
+        """
         r = await self._check()
-        url = f"https://ww.youtube.com/watch?v={r['contentDetails']['videoId']}"
+        url = f"https://www.youtube.com/watch?v={r['id']['videoId']}"
         embed = discord.Embed(color=0xC4302B)
         embed.description = r["snippet"]["description"]
         embed.set_author(
@@ -270,12 +276,12 @@ class YoutubeNotifier(commands.Cog):
         embed.title = r["snippet"]["title"]
         embed.url = url
         try:
-            embed.set_image(url=r["snippet"]["thumbnails"]["standard"]["url"])
-        except KeyError:
+            embed.set_image(url=f"https://i.ytimg.com/vi/{r['id']['videoId']}/sddefault.jpg")
+        except:
             pass
         embed.description = r["snippet"]["description"].split("\n\n")[0]
         embed.set_footer(text="Uploaded ")
-        embed.timestamp = dateutil.parser.parse(r["contentDetails"]["videoPublishedAt"])
+        embed.timestamp = dateutil.parser.parse(r["snippet"]["publishedAt"])
         await ctx.channel.send(
             f"{self.msg.replace('{url}', url) if len(self.msg) > 0 else ' '}",
             embed=embed,
